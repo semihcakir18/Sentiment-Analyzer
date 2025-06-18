@@ -1,0 +1,1 @@
+- Download the zip file into the data folder and then unzip it.
