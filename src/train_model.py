@@ -71,14 +71,12 @@ def train_sentiment_model():
     # Step 5: Create and train neural network
     print("\n🧠 STEP 5: Training neural network...")
 
-    model = NeuralNetwork() 
-    model.add_layer(input_size=vectorizer.vocabulary_size, output_size=256, activation_name="relu")
-    model.add_layer(input_size=256, output_size=128, activation_name="relu")  
-    model.add_layer(input_size=128, output_size=64, activation_name="leaky_relu")
+    model = NeuralNetwork()
+    model.add_layer(input_size=vectorizer.vocabulary_size, output_size=128, activation_name="relu")
+    model.add_layer(input_size=128, output_size=64, activation_name="relu")
     model.add_layer(input_size=64, output_size=1, activation_name="sigmoid")
 
-    # Better optimizer settings
-    model.compile(optimizer=SGD(learning_rate=0.001), loss=BinaryCrossEntropy())  
+    model.compile(optimizer=SGD(learning_rate=0.01), loss=BinaryCrossEntropy()) 
 
     # Train the model
     model.train(X_train, train_labels, X_val, val_labels, epochs=50, batch_size=64)

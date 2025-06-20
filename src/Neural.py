@@ -189,9 +189,10 @@ class NeuralNetwork:
         self.loss_func = None
         self.optimizer = None
         # --- NEW --- 
-        self.loss_history = []
-        self.accuracy_history = []
-
+        self.train_loss_history = []
+        self.train_accuracy_history = []
+        self.val_loss_history = []
+        self.val_accuracy_history = []
     def add_layer(self, input_size, output_size, activation_name="sigmoid"):
         """Adds a new layer to the network."""
         self.layers.append(Layer(input_size, output_size, activation_name))
@@ -242,10 +243,11 @@ class NeuralNetwork:
         """
         Trains the neural network using mini-batch gradient descent.
         """
+        patience = int(epochs / 5)  # Adjust as needed
         best_val_accuracy = 0
-        patience = 5
         patience_counter = 0
         best_epoch_number = 0
+        
         if self.optimizer is None or self.loss_func is None:
             raise ValueError("Network must be compiled before training.")
 
@@ -286,14 +288,15 @@ class NeuralNetwork:
             train_loss = self.loss_func.loss(y_train.reshape(-1, 1), train_predictions)
             train_accuracy = self.calculate_accuracy(y_train, train_predictions)
 
-            self.loss_history.append(train_loss)
-            self.accuracy_history.append(train_accuracy)
+            self.train_loss_history.append(train_loss)
+            self.train_accuracy_history.append(train_accuracy)
+            
 
             # Calculate epoch time
             epoch_time = time.time() - epoch_start_time
             
             # Print progress with timing
-            print(f"Epoch {epoch + 1}/{epochs} - Loss: {train_loss:.4f}, Accuracy: {train_accuracy:.4f} - Time: {epoch_time:.2f}s")
+            print(f"Epoch {epoch + 1}/{epochs} - Loss: {train_loss:.4f}, Accuracy: {train_accuracy:.4f} - Time: {epoch_time:.2f}s",end="")
                     
             # Validation metrics if provided
             if X_val is not None and y_val is not None:
@@ -303,8 +306,12 @@ class NeuralNetwork:
                 )
                 val_accuracy = self.calculate_accuracy(y_val, val_predictions)
                 print(
-                    f"                    Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.4f} \n"
+                    f" --- Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.4f} \n"
                 )
+
+                self.val_loss_history.append(val_loss)
+                self.val_accuracy_history.append(val_accuracy)
+
                 if val_accuracy > best_val_accuracy:
                     best_val_accuracy = val_accuracy
                     best_epoch_number = epoch + 1
@@ -338,23 +345,32 @@ class NeuralNetwork:
 
     # --- NEW --- Added plot_training_history method for compatibility
     def plot_training_history(self):
-        """Plot training loss and accuracy."""
+        """Plot training/validation loss and accuracy."""
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
 
-        ax1.plot(self.loss_history)
-        ax1.set_title("Training Loss")
+        # 1. Accuracy Grafiği
+        ax1.plot(self.train_accuracy_history, label="Train Accuracy")
+        ax1.plot(self.val_accuracy_history, label="Validation Accuracy")
+        ax1.set_title("Accuracy")
         ax1.set_xlabel("Epoch")
-        ax1.set_ylabel("Binary Cross Entropy Loss")
+        ax1.set_ylabel("Accuracy")
         ax1.grid(True)
+        ax1.margins(x=0)
+        ax1.legend()
 
-        ax2.plot(self.accuracy_history)
-        ax2.set_title("Training Accuracy")
+        # 2. Loss Grafiği
+        ax2.plot(self.train_loss_history, label="Train Loss")
+        ax2.plot(self.val_loss_history, label="Validation Loss")
+        ax2.set_title("Loss")
         ax2.set_xlabel("Epoch")
-        ax2.set_ylabel("Accuracy")
+        ax2.set_ylabel("Binary Cross Entropy Loss")
         ax2.grid(True)
+        ax2.margins(x=0)
+        ax2.legend()
 
         plt.tight_layout()
         plt.show()
+
 
     # --- NEW --- Added save_model method for compatibility
     def save_model(self, filepath):
@@ -374,8 +390,8 @@ class NeuralNetwork:
             "weights": [layer.weights for layer in self.layers],
             "biases": [layer.bias for layer in self.layers],
             "optimizer_config": {"learning_rate": self.optimizer.learning_rate},
-            "loss_history": self.loss_history,
-            "accuracy_history": self.accuracy_history,
+            "loss_history": self.train_loss_history,
+            "accuracy_history": self.train_accuracy_history,
         }
         np.save(filepath, model_data)
         print(f"Model saved to {filepath}")
@@ -405,8 +421,8 @@ class NeuralNetwork:
         self.compile(optimizer, loss)
 
         # Load history
-        self.loss_history = model_data.get("loss_history", [])
-        self.accuracy_history = model_data.get("accuracy_history", [])
+        self.train_loss_history = model_data.get("loss_history", [])
+        self.train_accuracy_history = model_data.get("accuracy_history", [])
 
         print(f"Model loaded from {filepath}")
 
