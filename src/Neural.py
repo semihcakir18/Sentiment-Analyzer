@@ -3,6 +3,7 @@
 # ---------------------------------------------------------------------------
 import numpy as np
 import matplotlib.pyplot as plt
+import time 
 
 # ---------------------------------------------------------------------------
 # Core Components 
@@ -240,15 +241,24 @@ class NeuralNetwork:
     ):
         """
         Trains the neural network using mini-batch gradient descent.
-        This method is now compatible with the interface of Code 1.
         """
+        best_val_accuracy = 0
+        patience = 5
+        patience_counter = 0
+        best_epoch_number = 0
         if self.optimizer is None or self.loss_func is None:
             raise ValueError("Network must be compiled before training.")
 
         print(f"Training neural network for {epochs} epochs...")
         n_samples = X_train.shape[0]
+        
+        # Track total training time
+        total_start_time = time.time()
 
         for epoch in range(epochs):
+            # Start timing this epoch
+            epoch_start_time = time.time()
+            
             # Shuffle training data
             indices = np.random.permutation(n_samples)
             X_shuffled = X_train[indices]
@@ -279,24 +289,41 @@ class NeuralNetwork:
             self.loss_history.append(train_loss)
             self.accuracy_history.append(train_accuracy)
 
-            # Print progress (matching Code 1's style)
-            if (epoch + 1) % 10 == 0 or epoch == 0:
-                print(
-                    f"Epoch {epoch + 1}/{epochs} - Loss: {train_loss:.4f}, Accuracy: {train_accuracy:.4f}"
+            # Calculate epoch time
+            epoch_time = time.time() - epoch_start_time
+            
+            # Print progress with timing
+            print(f"Epoch {epoch + 1}/{epochs} - Loss: {train_loss:.4f}, Accuracy: {train_accuracy:.4f} - Time: {epoch_time:.2f}s")
+                    
+            # Validation metrics if provided
+            if X_val is not None and y_val is not None:
+                val_predictions = self.forward(X_val)
+                val_loss = self.loss_func.loss(
+                    y_val.reshape(-1, 1), val_predictions
                 )
+                val_accuracy = self.calculate_accuracy(y_val, val_predictions)
+                print(
+                    f"                    Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.4f} \n"
+                )
+                if val_accuracy > best_val_accuracy:
+                    best_val_accuracy = val_accuracy
+                    best_epoch_number = epoch + 1
+                    patience_counter = 0
+                else:
+                    patience_counter += 1
+                    if patience_counter >= patience:
+                        print(f"Early stopping at epoch {epoch}")
+                        break
 
-                # Validation metrics if provided
-                if X_val is not None and y_val is not None:
-                    val_predictions = self.forward(X_val)
-                    val_loss = self.loss_func.loss(
-                        y_val.reshape(-1, 1), val_predictions
-                    )
-                    val_accuracy = self.calculate_accuracy(y_val, val_predictions)
-                    print(
-                        f"                    Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.4f}"
-                    )
-
+        # Calculate total training time
+        total_time = time.time() - total_start_time
+        avg_epoch_time = total_time / epochs
+        
         print("Training completed!")
+        print(f"Best epoch number: {best_epoch_number}")
+        print(f"Val_acc of the best epoch: {best_val_accuracy}")
+        print(f"Total training time: {total_time:.2f}s")
+        print(f"Average time per epoch: {avg_epoch_time:.2f}s")
 
     # --- NEW --- Added predict method for compatibility
     def predict(self, X):
