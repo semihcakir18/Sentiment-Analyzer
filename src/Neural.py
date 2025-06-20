@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # ---------------------------------------------------------------------------
-# Core Components (Your code - Unchanged)
+# Core Components 
 # ---------------------------------------------------------------------------
 
 
@@ -15,7 +15,7 @@ class ActivationFunctions:
 
     @staticmethod
     def sigmoid(x):
-        # Clip x to prevent overflow, as done in Code 1 for stability
+        # Clip x to prevent overflow
         x = np.clip(x, -500, 500)
         return 1 / (1 + np.exp(-x))
 
@@ -101,7 +101,7 @@ class SGD:
 
 
 # ---------------------------------------------------------------------------
-# Network Architecture (Your code - Unchanged Layer Class)
+# Network Architecture 
 # ---------------------------------------------------------------------------
 
 
@@ -187,7 +187,7 @@ class NeuralNetwork:
         self.layers = []
         self.loss_func = None
         self.optimizer = None
-        # --- NEW --- Added history lists to match Code 1's structure
+        # --- NEW --- 
         self.loss_history = []
         self.accuracy_history = []
 
@@ -227,14 +227,14 @@ class NeuralNetwork:
                 error
             )  # Your original backward logic is perfect for hidden layers
 
-    # --- MODIFIED --- Changed from static to instance method to match Code 1
+    # --- MODIFIED --- Changed from static to instance method 
     def calculate_accuracy(self, y_true, y_pred):
         """Calculates classification accuracy for binary problems."""
         predicted_classes = (y_pred > 0.5).astype(int).flatten()
         y_true_flat = y_true.flatten()
         return np.mean(predicted_classes == y_true_flat)
 
-    # --- MODIFIED --- Updated train method to match Code 1's interface and functionality
+    # --- MODIFIED --- Updated train method 
     def train(
         self, X_train, y_train, X_val=None, y_val=None, epochs=100, batch_size=64
     ):
@@ -385,7 +385,7 @@ class NeuralNetwork:
 
 
 # ---------------------------------------------------------------------------
-# Test Execution (Using the interface from Code 1)
+# Test Execution 
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
