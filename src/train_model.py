@@ -13,6 +13,7 @@ from Neural import *
 
 def train_sentiment_model():
     """Complete training pipeline"""
+    np.random.seed(42)  # For reproducible results
     print("🚀 STARTING SENTIMENT ANALYSIS TRAINING")
     print("=" * 50)
 
@@ -20,6 +21,17 @@ def train_sentiment_model():
     print("\n📁 STEP 1: Loading data...")
     loader = IMDBDataLoader()
     reviews, labels = loader.load_training_data()
+
+    # Validation of loaded data
+    
+    print(f"Total samples loaded: {len(reviews)}")
+    print(f"Labels shape: {labels.shape}")
+    print(f"Unique labels: {np.unique(labels)}")
+
+    # Check for data consistency
+    if len(reviews) != len(labels):
+        print("❌ Mismatch between reviews and labels!")
+        return
 
     if len(reviews) == 0:
         print("❌ No data loaded! Make sure dataset is in data/aclImdb/")
