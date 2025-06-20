@@ -1,7 +1,7 @@
 import sys
 import os
 import numpy as np
-
+from sklearn.model_selection import train_test_split
 
 sys.path.append(os.path.dirname(__file__))
 
@@ -44,18 +44,14 @@ def train_sentiment_model():
 
     # Step 3: Create train/validation split
     print("\n✂️  STEP 3: Creating train/validation split...")
-    n_samples = len(cleaned_reviews)
-    train_size = int(0.8 * n_samples)
 
-    # Shuffle data
-    indices = np.random.permutation(n_samples)
-    train_indices = indices[:train_size]
-    val_indices = indices[train_size:]
-
-    train_reviews = [cleaned_reviews[i] for i in train_indices]
-    train_labels = labels[train_indices]
-    val_reviews = [cleaned_reviews[i] for i in val_indices]
-    val_labels = labels[val_indices]
+    # Better stratified split to ensure balanced classes
+    train_reviews, val_reviews, train_labels, val_labels = train_test_split(
+        cleaned_reviews, labels, 
+        test_size=0.2, 
+        random_state=42, 
+        stratify=labels 
+    )
 
     print(f"Training samples: {len(train_reviews)}")
     print(f"Validation samples: {len(val_reviews)}")
@@ -76,10 +72,13 @@ def train_sentiment_model():
     print("\n🧠 STEP 5: Training neural network...")
 
     model = NeuralNetwork() 
-    model.add_layer(input_size=vectorizer.vocabulary_size, output_size=128, activation_name="relu")
-    model.add_layer(input_size=128, output_size=1, activation_name="sigmoid")
-    model.compile(optimizer=SGD(learning_rate=0.01), loss=BinaryCrossEntropy())
+    model.add_layer(input_size=vectorizer.vocabulary_size, output_size=256, activation_name="relu")
+    model.add_layer(input_size=256, output_size=128, activation_name="relu")  
+    model.add_layer(input_size=128, output_size=64, activation_name="leaky_relu")
+    model.add_layer(input_size=64, output_size=1, activation_name="sigmoid")
 
+    # Better optimizer settings
+    model.compile(optimizer=SGD(learning_rate=0.001), loss=BinaryCrossEntropy())  
 
     # Train the model
     model.train(X_train, train_labels, X_val, val_labels, epochs=50, batch_size=64)
