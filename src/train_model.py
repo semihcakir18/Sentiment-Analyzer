@@ -71,10 +71,13 @@ def train_sentiment_model():
     # Step 5: Create and train neural network
     print("\n🧠 STEP 5: Training neural network...")
 
+    # Compress information through a bottleneck, then expand
     model = NeuralNetwork()
-    model.add_layer(input_size=vectorizer.vocabulary_size, output_size=512, activation_name="relu")
-    model.add_layer(input_size=512, output_size=256, activation_name="relu")
-    model.add_layer(input_size=256, output_size=1, activation_name="sigmoid")
+    model.add_layer(input_size=vectorizer.vocabulary_size, output_size=256, activation_name="relu")
+    model.add_layer(input_size=256, output_size=64, activation_name="relu")  # Bottleneck
+    model.add_layer(input_size=64, output_size=128, activation_name="relu")  # Expand
+    model.add_layer(input_size=128, output_size=32, activation_name="relu")
+    model.add_layer(input_size=32, output_size=1, activation_name="sigmoid")
 
     model.compile(optimizer=SGD(learning_rate=0.001), loss=BinaryCrossEntropy())
 
