@@ -90,12 +90,19 @@ class BinaryCrossEntropy(Loss):
 class SGD:
     """Stochastic Gradient Descent optimizer."""
 
-    def __init__(self, learning_rate=0.01):
+    def __init__(self, learning_rate=0.01, decay=0.0):
+        self.initial_lr = learning_rate
         self.learning_rate = learning_rate
+        self.decay = decay
+        self.iterations = 0
 
     def update(self, layer):
         """Updates the layer's weights and biases using the calculated gradients."""
-        # --- MODIFIED --- Averaging gradients over the batch size for stability
+        # Apply learning rate decay
+        if self.decay > 0:
+            self.learning_rate = self.initial_lr / (1 + self.decay * self.iterations)
+            self.iterations += 1
+            
         m = layer.input.shape[0]
         layer.weights -= self.learning_rate * (layer.delta_weights / m)
         layer.bias -= self.learning_rate * (layer.delta_bias / m)
