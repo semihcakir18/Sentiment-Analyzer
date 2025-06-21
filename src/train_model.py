@@ -71,18 +71,18 @@ def train_sentiment_model():
     # Step 5: Create and train neural network
     print("\n🧠 STEP 5: Training neural network...")
 
-    # Compress information through a bottleneck, then expand
+    # Using leaky_relu to prevent dying neurons
     model = NeuralNetwork()
-    model.add_layer(input_size=vectorizer.vocabulary_size, output_size=256, activation_name="relu")
-    model.add_layer(input_size=256, output_size=64, activation_name="relu")  # Bottleneck
-    model.add_layer(input_size=64, output_size=128, activation_name="relu")  # Expand
-    model.add_layer(input_size=128, output_size=32, activation_name="relu")
-    model.add_layer(input_size=32, output_size=1, activation_name="sigmoid")
+    model.add_layer(input_size=vectorizer.vocabulary_size, output_size=256, activation_name="leaky_relu")
+    model.add_layer(input_size=256, output_size=128, activation_name="leaky_relu")
+    model.add_layer(input_size=128, output_size=64, activation_name="leaky_relu")
+    model.add_layer(input_size=64, output_size=1, activation_name="sigmoid")
 
-    model.compile(optimizer=SGD(learning_rate=0.001), loss=BinaryCrossEntropy())
+    model.compile(optimizer=SGD(learning_rate=0.0001), loss=BinaryCrossEntropy())
+
 
     # Train the model
-    model.train(X_train, train_labels, X_val, val_labels, epochs=50, batch_size=64)
+    model.train(X_train, train_labels, X_val, val_labels, epochs=300, batch_size=64)
 
     # Step 6: Evaluate model
     print("\n📊 STEP 6: Evaluating model...")
