@@ -3,20 +3,17 @@
 # ---------------------------------------------------------------------------
 import numpy as np
 import matplotlib.pyplot as plt
-import time 
+import time
 
 # ---------------------------------------------------------------------------
-# Core Components 
+# Core Components
 # ---------------------------------------------------------------------------
 
 
 # --- Activation Functions ---
 class ActivationFunctions:
-    """A collection of static methods for activation functions and their derivatives."""
-
     @staticmethod
     def sigmoid(x):
-        # Clip x to prevent overflow
         x = np.clip(x, -500, 500)
         return 1 / (1 + np.exp(-x))
 
@@ -50,9 +47,8 @@ class ActivationFunctions:
         return np.ones_like(x)
 
 
+# --- Loss Functions ---
 class Loss:
-    """Base class for all loss functions."""
-
     def loss(self, y_true, y_pred):
         raise NotImplementedError
 
@@ -61,8 +57,6 @@ class Loss:
 
 
 class MSE(Loss):
-    """Mean Squared Error loss function."""
-
     def loss(self, y_true, y_pred):
         return np.mean(np.square(y_true - y_pred))
 
@@ -71,45 +65,77 @@ class MSE(Loss):
 
 
 class BinaryCrossEntropy(Loss):
-    """Binary Cross-Entropy loss function, suitable for binary classification."""
-
     def loss(self, y_true, y_pred):
-        # Clip predictions to prevent log(0) errors.
         y_pred = np.clip(y_pred, 1e-15, 1 - 1e-15)
         return -np.mean(y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred))
 
     def derivative(self, y_true, y_pred):
-        # The derivative of BCE combined with sigmoid's derivative simplifies nicely.
-        # This assumes the last layer uses a sigmoid activation.
-        # (y_pred - y_true) is the derivative of BCE w.r.t. the pre-activation output (z).
-        # Your original backward pass handles this correctly by multiplying by the activation derivative,
-        # but for compatibility with Code 1's simplified backprop, we just need the error signal.
         return y_pred - y_true
 
 
+# --- Optimizers ---
 class SGD:
     """Stochastic Gradient Descent optimizer."""
-
-    def __init__(self, learning_rate=0.01, decay=0.0):
-        self.initial_lr = learning_rate
+    def __init__(self, learning_rate=0.01):
         self.learning_rate = learning_rate
-        self.decay = decay
-        self.iterations = 0
 
     def update(self, layer):
         """Updates the layer's weights and biases using the calculated gradients."""
-        # Apply learning rate decay
-        if self.decay > 0:
-            self.learning_rate = self.initial_lr / (1 + self.decay * self.iterations)
-            self.iterations += 1
-            
-        m = layer.input.shape[0]
+        m = layer.input.shape[0] # Get batch size
         layer.weights -= self.learning_rate * (layer.delta_weights / m)
-        layer.bias -= self.learning_rate * (layer.delta_bias / m)
+        # ### FIXED ### - Changed layer.bias to layer.biases
+        layer.biases -= self.learning_rate * (layer.delta_bias / m)
 
+
+class Adam:
+    """Adam optimizer."""
+    def __init__(self, learning_rate=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8):
+        self.learning_rate = learning_rate
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.epsilon = epsilon
+        self.m = {}  # First moment vector
+        self.v = {}  # Second moment vector
+        self.t = 0   # Timestep
+
+    def update(self, layer):
+        """Updates the layer's weights and biases using the Adam algorithm."""
+        self.t += 1
+        layer_id = id(layer) # Use object id as a unique key for the layer
+
+        # Initialize moment vectors
+        if layer_id not in self.m:
+            # ### FIXED ### - Changed layer.bias to layer.biases
+            self.m[layer_id] = {'dW': np.zeros_like(layer.weights), 'db': np.zeros_like(layer.biases)}
+            self.v[layer_id] = {'dW': np.zeros_like(layer.weights), 'db': np.zeros_like(layer.biases)}
+        
+        m_batch = layer.input.shape[0]
+        grad_w = layer.delta_weights / m_batch
+        grad_b = layer.delta_bias / m_batch
+        
+        # Update biased first moment estimate
+        self.m[layer_id]['dW'] = self.beta1 * self.m[layer_id]['dW'] + (1 - self.beta1) * grad_w
+        self.m[layer_id]['db'] = self.beta1 * self.m[layer_id]['db'] + (1 - self.beta1) * grad_b
+
+        # Update biased second raw moment estimate
+        self.v[layer_id]['dW'] = self.beta2 * self.v[layer_id]['dW'] + (1 - self.beta2) * (grad_w ** 2)
+        self.v[layer_id]['db'] = self.beta2 * self.v[layer_id]['db'] + (1 - self.beta2) * (grad_b ** 2)
+
+        # Compute bias-corrected first moment estimate
+        m_hat_dW = self.m[layer_id]['dW'] / (1 - self.beta1 ** self.t)
+        m_hat_db = self.m[layer_id]['db'] / (1 - self.beta1 ** self.t)
+
+        # Compute bias-corrected second raw moment estimate
+        v_hat_dW = self.v[layer_id]['dW'] / (1 - self.beta2 ** self.t)
+        v_hat_db = self.v[layer_id]['db'] / (1 - self.beta2 ** self.t)
+
+        # Update parameters
+        layer.weights -= self.learning_rate * m_hat_dW / (np.sqrt(v_hat_dW) + self.epsilon)
+        # ### FIXED ### - Changed layer.bias to layer.biases
+        layer.biases -= self.learning_rate * m_hat_db / (np.sqrt(v_hat_db) + self.epsilon)
 
 # ---------------------------------------------------------------------------
-# Network Architecture 
+# Network Architecture
 # ---------------------------------------------------------------------------
 
 
@@ -117,22 +143,21 @@ class Layer:
     """Represents a single dense layer in the neural network."""
 
     def __init__(self, input_size, output_size, activation_name="sigmoid"):
-        self.input_size = input_size  # --- NEW --- Store for saving model
-        self.output_size = output_size  # --- NEW --- Store for saving model
+        self.type = "dense"  # ### NEW ### For saving/loading
+        self.input_size = input_size
+        self.output_size = output_size
         self.activation_name = activation_name
 
+        # Weight Initialization
         if self.activation_name in ["relu", "leaky_relu"]:
             self.weights = np.random.randn(input_size, output_size) * np.sqrt(
                 2.0 / input_size
             )
-        elif self.activation_name == "sigmoid":
+        else:
             self.weights = np.random.randn(input_size, output_size) * np.sqrt(
                 1.0 / input_size
             )
-        else:
-            self.weights = np.random.randn(input_size, output_size) * 0.01
-
-        self.bias = np.zeros((1, output_size))
+        self.biases = np.zeros((1, output_size))
 
         activations = {
             "sigmoid": (
@@ -150,212 +175,165 @@ class Layer:
             ),
         }
 
-        if self.activation_name not in activations:
-            raise ValueError(f"Unsupported activation function: {self.activation_name}")
         self.activation_func, self.activation_derivative_func = activations[
             self.activation_name
         ]
-
-        self.input = None
-        self.output = None
-        self.delta_weights = None
-        self.delta_bias = None
+        self.input, self.output, self.delta_weights, self.delta_bias = (
+            None,
+            None,
+            None,
+            None,
+        )
 
     def forward(self, input_data):
         self.input = input_data
-        self.output = np.dot(input_data, self.weights) + self.bias
+        self.output = np.dot(input_data, self.weights) + self.biases
         return self.activation_func(self.output)
 
     def backward(self, output_error):
-        # --- MODIFIED --- The derivative logic is slightly adjusted to work with the simplified BCE derivative
-        # The output_error is now (a - y) if coming from the loss function, or the propagated error from the next layer.
-        # For the last layer, the error passed in is dz, so we don't need to multiply by the derivative.
-        # For hidden layers, the error is da, so we do.
-        # Your original code was general. This makes it slightly more specific to the BCE+Sigmoid case.
-        # We can simplify this by checking if it's the last layer. A simpler approach is to adjust the BCE derivative.
-        # Let's use the simplified BCE derivative: (y_pred - y_true) which is dL/dz.
-        # This makes the backward pass consistent.
         activated_error = output_error * self.activation_derivative_func(self.output)
         self.delta_weights = np.dot(self.input.T, activated_error)
         self.delta_bias = np.sum(activated_error, axis=0, keepdims=True)
-        input_error = np.dot(activated_error, self.weights.T)
-        return input_error
+        return np.dot(activated_error, self.weights.T)
+
+
+# ### NEW ### - Dropout Layer
+class Dropout:
+    """Dropout layer for regularization."""
+
+    def __init__(self, rate):
+        self.type = "dropout"  # ### NEW ### For saving/loading
+        self.rate = rate
+        self.mask = None
+        self.is_training = True  # Controlled by the NeuralNetwork class
+
+    def forward(self, inputs):
+        if self.is_training:
+            # We use inverted dropout
+            self.mask = (np.random.rand(*inputs.shape) > self.rate) / (1.0 - self.rate)
+            return inputs * self.mask
+        else:
+            # During evaluation/testing, this layer does nothing
+            return inputs
+
+    def backward(self, dvalues):
+        # Apply the same mask to the gradients
+        return dvalues * self.mask
 
 
 # ---------------------------------------------------------------------------
-# Main Neural Network Class (Your Code with Compatibility Additions)
+# Main Neural Network Class
 # ---------------------------------------------------------------------------
 
 
 class NeuralNetwork:
-    """A fully-connected feedforward neural network."""
-
     def __init__(self):
-        """Initializes the network components."""
         self.layers = []
         self.loss_func = None
         self.optimizer = None
-        # --- NEW --- 
         self.train_loss_history = []
         self.train_accuracy_history = []
         self.val_loss_history = []
         self.val_accuracy_history = []
-    def add_layer(self, input_size, output_size, activation_name="sigmoid"):
-        """Adds a new layer to the network."""
-        self.layers.append(Layer(input_size, output_size, activation_name))
+
+    # ### MODIFIED ### - Now accepts a layer object directly
+    def add_layer(self, layer):
+        """Adds a layer object (e.g., Layer, Dropout) to the network."""
+        self.layers.append(layer)
 
     def compile(self, optimizer, loss):
-        """Configures the model for training with a specified optimizer and loss function."""
         self.optimizer = optimizer
         self.loss_func = loss
 
+    # ### NEW ### - Methods to control training/evaluation mode for dropout
+    def train_mode(self):
+        for layer in self.layers:
+            if isinstance(layer, Dropout):
+                layer.is_training = True
+
+    def eval_mode(self):
+        for layer in self.layers:
+            if isinstance(layer, Dropout):
+                layer.is_training = False
+
     def forward(self, input_data):
-        """Propagates input data through all layers."""
         output = input_data
         for layer in self.layers:
             output = layer.forward(output)
         return output
 
     def backward(self, y_true, y_pred):
-        """Initiates the backpropagation process starting from the loss derivative."""
-        # --- MODIFIED --- Now using the simplified derivative (y_pred - y_true), which is dL/dz for the final layer
         error = self.loss_func.derivative(y_true, y_pred)
+        # Propagate error backwards through all layers
+        for layer in reversed(self.layers):
+            error = layer.backward(error)
 
-        # --- MODIFIED --- The backward pass for the last layer is now simpler
-        # because the error is already dL/dz. For other layers, it remains dL/da.
-        last_layer = self.layers[-1]
-        # Calculate gradients for the last layer directly
-        last_layer.delta_weights = np.dot(last_layer.input.T, error)
-        last_layer.delta_bias = np.sum(error, axis=0, keepdims=True)
-        # Propagate error to the previous layer
-        error = np.dot(error, last_layer.weights.T)
-
-        # For all other layers in reverse
-        for layer in reversed(self.layers[:-1]):
-            error = layer.backward(
-                error
-            )  # Your original backward logic is perfect for hidden layers
-
-    # --- MODIFIED --- Changed from static to instance method 
     def calculate_accuracy(self, y_true, y_pred):
-        """Calculates classification accuracy for binary problems."""
         predicted_classes = (y_pred > 0.5).astype(int).flatten()
         y_true_flat = y_true.flatten()
         return np.mean(predicted_classes == y_true_flat)
 
-    # --- MODIFIED --- Updated train method 
     def train(
         self, X_train, y_train, X_val=None, y_val=None, epochs=100, batch_size=64
     ):
-        """
-        Trains the neural network using mini-batch gradient descent.
-        """
-        patience = int(epochs / 5)  # Adjust as needed
-        best_val_accuracy = 0
-        patience_counter = 0
-        best_epoch_number = 0
-        
-        if self.optimizer is None or self.loss_func is None:
-            raise ValueError("Network must be compiled before training.")
-
-        print(f"Training neural network for {epochs} epochs...")
-        n_samples = X_train.shape[0]
-        
-        # Track total training time
-        total_start_time = time.time()
+        # Set network to training mode
+        self.train_mode()
 
         for epoch in range(epochs):
-            # Start timing this epoch
             epoch_start_time = time.time()
-            
-            # Shuffle training data
-            indices = np.random.permutation(n_samples)
-            X_shuffled = X_train[indices]
-            y_shuffled = y_train[indices]
+            indices = np.random.permutation(X_train.shape[0])
+            X_shuffled, y_shuffled = X_train[indices], y_train[indices]
 
-            # Mini-batch training
-            for i in range(0, n_samples, batch_size):
+            for i in range(0, X_train.shape[0], batch_size):
                 X_batch = X_shuffled[i : i + batch_size]
-                y_batch = y_shuffled[i : i + batch_size].reshape(
-                    -1, 1
-                )  # Ensure y is a column vector
+                y_batch = y_shuffled[i : i + batch_size].reshape(-1, 1)
 
-                # 1. Forward pass
                 predictions = self.forward(X_batch)
-
-                # 2. Backward pass
                 self.backward(y_batch, predictions)
 
-                # 3. Update weights
+                # ### MODIFIED ### - Only update layers with weights (skips Dropout)
                 for layer in self.layers:
-                    self.optimizer.update(layer)
+                    if hasattr(layer, "weights"):
+                        self.optimizer.update(layer)
 
-            # Calculate and store loss and accuracy for this epoch
+            # --- Logging and Validation ---
+            # Set to evaluation mode for accurate metrics
+            self.eval_mode()
+
             train_predictions = self.forward(X_train)
             train_loss = self.loss_func.loss(y_train.reshape(-1, 1), train_predictions)
             train_accuracy = self.calculate_accuracy(y_train, train_predictions)
-
             self.train_loss_history.append(train_loss)
             self.train_accuracy_history.append(train_accuracy)
-            
 
-            # Calculate epoch time
-            epoch_time = time.time() - epoch_start_time
-            
-            # Print progress with timing
-            print(f"Epoch {epoch + 1}/{epochs} - Loss: {train_loss:.4f}, Accuracy: {train_accuracy:.4f} - Time: {epoch_time:.2f}s",end="")
-                    
-            # Validation metrics if provided
-            if X_val is not None and y_val is not None:
+            log_message = f"Epoch {epoch + 1}/{epochs} - Loss: {train_loss:.4f}, Acc: {train_accuracy:.4f}"
+
+            if X_val is not None:
                 val_predictions = self.forward(X_val)
-                val_loss = self.loss_func.loss(
-                    y_val.reshape(-1, 1), val_predictions
-                )
+                val_loss = self.loss_func.loss(y_val.reshape(-1, 1), val_predictions)
                 val_accuracy = self.calculate_accuracy(y_val, val_predictions)
-                print(
-                    f" --- Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.4f} \n"
-                )
-
                 self.val_loss_history.append(val_loss)
                 self.val_accuracy_history.append(val_accuracy)
+                log_message += (
+                    f" - Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.4f}"
+                )
 
-                if val_accuracy > best_val_accuracy:
-                    best_val_accuracy = val_accuracy
-                    best_epoch_number = epoch + 1
-                    patience_counter = 0
-                else:
-                    patience_counter += 1
-                    if patience_counter >= patience:
-                        print(f"Early stopping at epoch {epoch}")
-                        break
+            print(log_message + f" - Time: {time.time() - epoch_start_time:.2f}s")
 
-        # Calculate total training time
-        total_time = time.time() - total_start_time
-        avg_epoch_time = total_time / epochs
-        
-        print("Training completed!")
-        print(f"Best epoch number: {best_epoch_number}")
-        print(f"Val_acc of the best epoch: {best_val_accuracy}")
-        print(f"Total training time: {total_time:.2f}s")
-        print(f"Average time per epoch: {avg_epoch_time:.2f}s")
+            # Switch back to training mode for the next epoch
+            self.train_mode()
 
-    # --- NEW --- Added predict method for compatibility
     def predict(self, X):
-        """Make predictions on new data (alias for forward pass)."""
+        self.eval_mode()  # Ensure dropout is off for prediction
         return self.forward(X)
 
-    # --- NEW --- Added predict_classes method for compatibility
     def predict_classes(self, X):
-        """Make class predictions (0 or 1)."""
+        self.eval_mode()  # Ensure dropout is off for prediction
         probabilities = self.predict(X)
         return (probabilities > 0.5).astype(int).flatten()
 
-    # --- NEW --- Added plot_training_history method for compatibility
     def plot_training_history(self):
-        """Plot training/validation loss and accuracy."""
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-
-        # 1. Accuracy Grafiği
         ax1.plot(self.train_accuracy_history, label="Train Accuracy")
         ax1.plot(self.val_accuracy_history, label="Validation Accuracy")
         ax1.set_title("Accuracy")
@@ -364,8 +342,6 @@ class NeuralNetwork:
         ax1.grid(True)
         ax1.margins(x=0)
         ax1.legend()
-
-        # 2. Loss Grafiği
         ax2.plot(self.train_loss_history, label="Train Loss")
         ax2.plot(self.val_loss_history, label="Validation Loss")
         ax2.set_title("Loss")
@@ -374,120 +350,70 @@ class NeuralNetwork:
         ax2.grid(True)
         ax2.margins(x=0)
         ax2.legend()
-
         plt.tight_layout()
         plt.show()
 
-
-    # --- NEW --- Added save_model method for compatibility
     def save_model(self, filepath):
-        """Saves the model's architecture, weights, and optimizer state."""
         architecture = []
+        weights = []
+        biases = []
         for layer in self.layers:
-            architecture.append(
-                {
-                    "input_size": layer.input_size,
-                    "output_size": layer.output_size,
-                    "activation_name": layer.activation_name,
-                }
-            )
+            if layer.type == "dense":
+                architecture.append(
+                    {
+                        "type": "dense",
+                        "input_size": layer.input_size,
+                        "output_size": layer.output_size,
+                        "activation_name": layer.activation_name,
+                    }
+                )
+                weights.append(layer.weights)
+                biases.append(layer.biases)
+            elif layer.type == "dropout":
+                architecture.append({"type": "dropout", "rate": layer.rate})
 
         model_data = {
             "architecture": architecture,
-            "weights": [layer.weights for layer in self.layers],
-            "biases": [layer.bias for layer in self.layers],
-            "optimizer_config": {"learning_rate": self.optimizer.learning_rate},
-            "loss_history": self.train_loss_history,
-            "accuracy_history": self.train_accuracy_history,
+            "weights": weights,
+            "biases": biases,
         }
         np.save(filepath, model_data)
         print(f"Model saved to {filepath}")
 
-    # --- NEW --- Added load_model method for compatibility
     def load_model(self, filepath):
-        """Loads a model from a file."""
         model_data = np.load(filepath, allow_pickle=True).item()
-
-        # Rebuild architecture
         self.layers = []
+        weight_idx, bias_idx = 0, 0
         for layer_config in model_data["architecture"]:
-            self.add_layer(
-                input_size=layer_config["input_size"],
-                output_size=layer_config["output_size"],
-                activation_name=layer_config["activation_name"],
-            )
-
-        # Load weights and biases
-        for i, layer in enumerate(self.layers):
-            layer.weights = model_data["weights"][i]
-            layer.bias = model_data["biases"][i]
-
-        # Re-compile model
-        optimizer = SGD(learning_rate=model_data["optimizer_config"]["learning_rate"])
-        loss = BinaryCrossEntropy()  # Assuming BCE for sentiment analysis
-        self.compile(optimizer, loss)
-
-        # Load history
-        self.train_loss_history = model_data.get("loss_history", [])
-        self.train_accuracy_history = model_data.get("accuracy_history", [])
-
+            if layer_config["type"] == "dense":
+                new_layer = Layer(
+                    input_size=layer_config["input_size"],
+                    output_size=layer_config["output_size"],
+                    activation_name=layer_config["activation_name"],
+                )
+                new_layer.weights = model_data["weights"][weight_idx]
+                new_layer.biases = model_data["biases"][bias_idx]
+                self.add_layer(new_layer)
+                weight_idx += 1
+                bias_idx += 1
+            elif layer_config["type"] == "dropout":
+                self.add_layer(Dropout(rate=layer_config["rate"]))
         print(f"Model loaded from {filepath}")
 
 
-# ---------------------------------------------------------------------------
-# Test Execution 
-# ---------------------------------------------------------------------------
-
 if __name__ == "__main__":
-    print("🧪 TESTING MODIFIED NEURAL NETWORK")
+    print("🧪 TESTING NEWLY IMPLEMENTED NEURAL NETWORK")
     print("=" * 40)
-
-    # 1. Prepare dummy data
-    n_samples = 1000
-    input_size = 100
-    hidden_size = 32
-
-    X = np.random.randn(n_samples, input_size)
-    y = np.random.randint(0, 2, n_samples)
-
-    # 2. Build the Neural Network using your modular design
+    # Testing Adam and Dropout
     network = NeuralNetwork()
-    network.add_layer(
-        input_size=input_size, output_size=hidden_size, activation_name="relu"
-    )
-    network.add_layer(input_size=hidden_size, output_size=1, activation_name="sigmoid")
+    network.add_layer(Layer(input_size=100, output_size=64, activation_name="relu"))
+    network.add_layer(Dropout(rate=0.5))  # Add dropout
+    network.add_layer(Layer(input_size=64, output_size=1, activation_name="sigmoid"))
 
-    # 3. Compile the model
-    network.compile(optimizer=SGD(learning_rate=0.01), loss=BinaryCrossEntropy())
+    network.compile(
+        optimizer=Adam(learning_rate=0.001), loss=BinaryCrossEntropy()
+    )  # Use Adam
 
-    # 4. Train the model using the new compatible `train` method
-    network.train(X, y, epochs=500, batch_size=64)
-
-    # 5. Make predictions using the new compatible methods
-    predictions = network.predict(X[:10])
-    class_predictions = network.predict_classes(X[:10])
-
-    print(f"\nSample predictions (probabilities): {predictions.flatten()[:5]}")
-    print(f"Sample class predictions: {class_predictions[:5]}")
-    print(f"Actual labels: {y[:5]}")
-
-    # 6. Test saving and loading
-    model_path = "./models/my_custom_model.npy"
-    network.save_model(model_path)
-
-    # Create a new, empty network and load the saved state
-    new_network = NeuralNetwork()
-    new_network.load_model(model_path)
-
-    print("\nTesting loaded model...")
-    loaded_predictions = new_network.predict_classes(X[:10])
-    print(f"Loaded model predictions: {loaded_predictions[:5]}")
-    assert np.array_equal(
-        class_predictions, loaded_predictions
-    ), "Loaded model predictions do not match!"
-    print("✅ Model save/load test passed!")
-
-    # 7. Plot history
-    network.plot_training_history()
-
-    print("✅ Neural network test completed!")
+    X = np.random.randn(1000, 100)
+    y = np.random.randint(0, 2, 1000)
+    network.train(X, y, epochs=10, batch_size=32)
