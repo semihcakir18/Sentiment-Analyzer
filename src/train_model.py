@@ -1,7 +1,7 @@
 import sys
 import os
 import numpy as np
-
+from sklearn.model_selection import train_test_split
 
 sys.path.append(os.path.dirname(__file__))
 
@@ -37,6 +37,28 @@ def train_sentiment_model():
         print("❌ No data loaded! Make sure dataset is in data/aclImdb/")
         return
 
+    # Add this after loading data to check for issues
+    def analyze_data_quality(reviews, labels):
+        print("=== DATA QUALITY ANALYSIS ===")
+        print(f"Total samples: {len(reviews)}")
+        print(f"Positive samples: {np.sum(labels == 1)}")
+        print(f"Negative samples: {np.sum(labels == 0)}")
+        print(f"Class balance: {np.sum(labels == 1) / len(labels):.3f}")
+        
+        # Check review lengths
+        lengths = [len(review.split()) for review in reviews]
+        print(f"Average review length: {np.mean(lengths):.1f} words")
+        print(f"Min length: {np.min(lengths)}, Max length: {np.max(lengths)}")
+        
+        # Check for duplicates
+        unique_reviews = len(set(reviews))
+        print(f"Unique reviews: {unique_reviews}/{len(reviews)} ({unique_reviews/len(reviews):.3f})")
+        
+        return True
+
+    # Call it after loading data
+    analyze_data_quality(reviews, labels)
+
     # Step 2: Preprocess text
     print("\n🧹 STEP 2: Preprocessing text...")
     preprocessor = TextPreprocessor()
@@ -44,25 +66,21 @@ def train_sentiment_model():
 
     # Step 3: Create train/validation split
     print("\n✂️  STEP 3: Creating train/validation split...")
-    n_samples = len(cleaned_reviews)
-    train_size = int(0.8 * n_samples)
 
-    # Shuffle data
-    indices = np.random.permutation(n_samples)
-    train_indices = indices[:train_size]
-    val_indices = indices[train_size:]
-
-    train_reviews = [cleaned_reviews[i] for i in train_indices]
-    train_labels = labels[train_indices]
-    val_reviews = [cleaned_reviews[i] for i in val_indices]
-    val_labels = labels[val_indices]
+    # Better stratified split to ensure balanced classes
+    train_reviews, val_reviews, train_labels, val_labels = train_test_split(
+        cleaned_reviews, labels, 
+        test_size=0.2, 
+        random_state=42, 
+        stratify=labels 
+    )
 
     print(f"Training samples: {len(train_reviews)}")
     print(f"Validation samples: {len(val_reviews)}")
 
     # Step 4: Vectorize text
     print("\n🔢 STEP 4: Converting text to numbers...")
-    vectorizer = BagOfWordsVectorizer(max_features=5000, min_word_freq=5)
+    vectorizer = BagOfWordsVectorizer(max_features=20000, min_word_freq=2)
 
     # Fit vectorizer on training data only
     X_train = vectorizer.fit_transform(train_reviews)
@@ -75,14 +93,17 @@ def train_sentiment_model():
     # Step 5: Create and train neural network
     print("\n🧠 STEP 5: Training neural network...")
 
-    model = NeuralNetwork() 
-    model.add_layer(input_size=vectorizer.vocabulary_size, output_size=128, activation_name="relu")
-    model.add_layer(input_size=128, output_size=1, activation_name="sigmoid")
-    model.compile(optimizer=SGD(learning_rate=0.01), loss=BinaryCrossEntropy())
+    # Different activations for different purposes
+    model = NeuralNetwork()
+    model.add_layer(input_size=vectorizer.vocabulary_size, output_size=64, activation_name="relu")
+    model.add_layer(input_size=64, output_size=1, activation_name="sigmoid")
+
+    model.compile(optimizer=SGD(learning_rate=0.01, decay=0.001) , loss=BinaryCrossEntropy())
+ 
 
 
     # Train the model
-    model.train(X_train, train_labels, X_val, val_labels, epochs=50, batch_size=64)
+    model.train(X_train, train_labels, X_val, val_labels, epochs=100, batch_size=64)
 
     # Step 6: Evaluate model
     print("\n📊 STEP 6: Evaluating model...")
