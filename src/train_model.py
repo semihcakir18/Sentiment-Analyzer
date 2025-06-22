@@ -12,93 +12,79 @@ from vectorizer_spacy import vectorize_reviews
 
 
 def train_sentiment_model():
-    """Complete training pipeline with spaCy embeddings"""
-    np.random.seed(42)  # For reproducible results
-    print("🚀 STARTING SENTIMENT ANALYSIS TRAINING (with spaCy Embeddings)")
+    """Complete training pipeline with caching and CORRECTED spaCy usage"""
+    np.random.seed(42)
+    print("🚀 STARTING SENTIMENT ANALYSIS TRAINING (Corrected Pipeline)")
     print("=" * 50)
 
-    # Step 1: Load data 
+    # Step 1: Load data
     print("\n📁 STEP 1: Loading data...")
     loader = IMDBDataLoader()
     reviews, labels = loader.load_training_data()
 
-    # --- Data quality analysis  ---
-    def analyze_data_quality(reviews, labels):
-        print("=== DATA QUALITY ANALYSIS ===")
-        print(f"Total samples: {len(reviews)}")
-        print(f"Positive samples: {np.sum(labels == 1)}")
-        print(f"Negative samples: {np.sum(labels == 0)}")
-        print(f"Class balance: {np.sum(labels == 1) / len(labels):.3f}")
-        lengths = [len(review.split()) for review in reviews]
-        print(f"Average review length: {np.mean(lengths):.1f} words")
-        unique_reviews = len(set(reviews))
-        print(
-            f"Unique reviews: {unique_reviews}/{len(reviews)} ({unique_reviews/len(reviews):.3f})"
-        )
-        return True
-
-    analyze_data_quality(reviews, labels)
-    # -----------------------------------------------
-
-    # Step 2: Preprocess text
-    print("\n🧹 STEP 2: Preprocessing text...")
-    preprocessor = TextPreprocessor()
-    cleaned_reviews = preprocessor.clean_reviews(reviews)
-
-    # Step 3: Create train/validation split
-    print("\n✂️  STEP 3: Creating train/validation split...")
+    # Step 2: Create train/validation split (from the ORIGINAL reviews)
+    print("\n✂️  STEP 2: Creating train/validation split...")
     train_reviews, val_reviews, train_labels, val_labels = train_test_split(
-        cleaned_reviews, labels, test_size=0.2, random_state=42, stratify=labels
+        reviews,
+        labels,
+        test_size=0.2,
+        random_state=42,
+        stratify=labels,  # Use original reviews
     )
     print(f"Training samples: {len(train_reviews)}")
     print(f"Validation samples: {len(val_reviews)}")
 
-    # Step 4: Vectorize text using spaCy
-    print("\n🔢 STEP 4: Converting text to spaCy vectors (or loading from cache)...")
+    # We will still create a preprocessor object for use later, but we DON'T
+    # use it on the main dataset before vectorization.
+    preprocessor = TextPreprocessor()
 
-    # Define file paths for our cached numpy arrays
-    os.makedirs("models", exist_ok=True)  # Ensure the directory exists
-    train_vectors_path = "models/X_train_spacy.npy"
-    val_vectors_path = "models/X_val_spacy.npy"
+    # Step 3: Load or Generate Vectors
+    print("\n🔢 STEP 3: Converting text to spaCy vectors (or loading from cache)...")
+    os.makedirs("models", exist_ok=True)
+    # Give them new names to avoid using the old, bad vectors
+    train_vectors_path = "models/X_train_spacy_raw.npy"
+    val_vectors_path = "models/X_val_spacy_raw.npy"
 
     if os.path.exists(train_vectors_path) and os.path.exists(val_vectors_path):
-        print("Pre-computed vectors found! Loading from disk...")
+        print("Pre-computed RAW vectors found! Loading from disk...")
         X_train = np.load(train_vectors_path)
         X_val = np.load(val_vectors_path)
     else:
-        print("Pre-computed vectors not found. Generating and saving them...")
+        print("Pre-computed RAW vectors not found. Generating from original reviews...")
+        # ### CRITICAL: Call vectorize_reviews on the original text ###
         X_train = vectorize_reviews(train_reviews)
         X_val = vectorize_reviews(val_reviews)
-        # Save the generated vectors for next time
         np.save(train_vectors_path, X_train)
         np.save(val_vectors_path, X_val)
-        print("Vectors saved to disk for future runs.")
+        print("RAW vectors saved to disk for future runs.")
 
     print(f"Training data shape: {X_train.shape}")
     print(f"Validation data shape: {X_val.shape}")
 
-    # Step 5: Create and train neural network
-    print("\n🧠 STEP 5: Training neural network...")
+    print("\n🧠 STEP 5: Building and training a regularized neural network...")
 
     model = NeuralNetwork()
-    # Encoder part (compression)
-    model.add_layer(input_size=X_train.shape[1], output_size=512, activation_name="relu")
-    model.add_layer(input_size=512, output_size=256, activation_name="relu")
-    model.add_layer(input_size=256, output_size=128, activation_name="relu")
-    model.add_layer(input_size=128, output_size=64, activation_name="relu")
-    model.add_layer(input_size=64, output_size=32, activation_name="relu")  # Bottleneck
-    # Decoder part (expansion)
-    model.add_layer(input_size=32, output_size=64, activation_name="relu")
-    model.add_layer(input_size=64, output_size=128, activation_name="relu")
-    model.add_layer(input_size=128, output_size=64, activation_name="relu")
-    model.add_layer(input_size=64, output_size=32, activation_name="relu")
-    model.add_layer(input_size=32, output_size=1, activation_name="sigmoid")
 
-    model.compile(optimizer=SGD(learning_rate=0.01), loss=BinaryCrossEntropy())
+    # Add the first dense layer
+    model.add_layer(
+        Layer(input_size=X_train.shape[1], output_size=128, activation_name="relu")
+    )
+    # Add a Dropout layer after it
+    model.add_layer(Dropout(rate=0.5))
 
+    # Add the second dense layer
+    model.add_layer(Layer(input_size=128, output_size=64, activation_name="relu"))
+    # Add another Dropout layer
+    model.add_layer(Dropout(rate=0.5))
 
-    # With embeddings, you often need fewer epochs. Let's start with 20.
-    model.train(X_train, train_labels, X_val, val_labels, epochs=200, batch_size=64)
+    # Add the final output layer
+    model.add_layer(Layer(input_size=64, output_size=1, activation_name="sigmoid"))
+
+    # Compile with the powerful Adam optimizer
+    model.compile(optimizer=Adam(learning_rate=0.0004), loss=BinaryCrossEntropy())
+
+    # Train the model
+    model.train(X_train, train_labels, X_val, val_labels, epochs=300, batch_size=128)
 
     # Step 6: Evaluate model
     print("\n📊 STEP 6: Evaluating model...")
@@ -116,21 +102,17 @@ def train_sentiment_model():
 
     # Step 8: Test with sample predictions
     print("\n🧪 STEP 8: Testing with sample reviews...")
+    # For single predictions, it's still okay to clean the text first
     test_reviews = [
         "This movie was absolutely amazing! I loved every minute of it.",
-        "Terrible film. Waste of time. Very disappointed.",
+        "Terrible film. Waste of time. The acting was not good at all.",
         "It was okay, nothing special but not bad either.",
-        "The plot was confusing and the acting was wooden. I would not recommend this.",
     ]
-
     for review in test_reviews:
-        cleaned = preprocessor.clean_text(review)
-        # Vectorize the single cleaned review using our function
-        vector = vectorize_reviews([cleaned])
-        # Predict
+        # Here we pass the raw text directly to the vectorizer, matching our training process
+        vector = vectorize_reviews([review])
         probability = model.predict(vector)[0][0]
         sentiment = "Positive" if probability > 0.5 else "Negative"
-
         print(f"Review: '{review[:50]}...'")
         print(f"Prediction: {sentiment} (confidence: {probability:.3f})")
         print()

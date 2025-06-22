@@ -76,12 +76,13 @@ class BinaryCrossEntropy(Loss):
 # --- Optimizers ---
 class SGD:
     """Stochastic Gradient Descent optimizer."""
+
     def __init__(self, learning_rate=0.01):
         self.learning_rate = learning_rate
 
     def update(self, layer):
         """Updates the layer's weights and biases using the calculated gradients."""
-        m = layer.input.shape[0] # Get batch size
+        m = layer.input.shape[0]  # Get batch size
         layer.weights -= self.learning_rate * (layer.delta_weights / m)
         # ### FIXED ### - Changed layer.bias to layer.biases
         layer.biases -= self.learning_rate * (layer.delta_bias / m)
@@ -89,6 +90,7 @@ class SGD:
 
 class Adam:
     """Adam optimizer."""
+
     def __init__(self, learning_rate=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8):
         self.learning_rate = learning_rate
         self.beta1 = beta1
@@ -96,43 +98,62 @@ class Adam:
         self.epsilon = epsilon
         self.m = {}  # First moment vector
         self.v = {}  # Second moment vector
-        self.t = 0   # Timestep
+        self.t = 0  # Timestep
 
     def update(self, layer):
         """Updates the layer's weights and biases using the Adam algorithm."""
         self.t += 1
-        layer_id = id(layer) # Use object id as a unique key for the layer
+        layer_id = id(layer)  # Use object id as a unique key for the layer
 
         # Initialize moment vectors
         if layer_id not in self.m:
             # ### FIXED ### - Changed layer.bias to layer.biases
-            self.m[layer_id] = {'dW': np.zeros_like(layer.weights), 'db': np.zeros_like(layer.biases)}
-            self.v[layer_id] = {'dW': np.zeros_like(layer.weights), 'db': np.zeros_like(layer.biases)}
-        
+            self.m[layer_id] = {
+                "dW": np.zeros_like(layer.weights),
+                "db": np.zeros_like(layer.biases),
+            }
+            self.v[layer_id] = {
+                "dW": np.zeros_like(layer.weights),
+                "db": np.zeros_like(layer.biases),
+            }
+
         m_batch = layer.input.shape[0]
         grad_w = layer.delta_weights / m_batch
         grad_b = layer.delta_bias / m_batch
-        
+
         # Update biased first moment estimate
-        self.m[layer_id]['dW'] = self.beta1 * self.m[layer_id]['dW'] + (1 - self.beta1) * grad_w
-        self.m[layer_id]['db'] = self.beta1 * self.m[layer_id]['db'] + (1 - self.beta1) * grad_b
+        self.m[layer_id]["dW"] = (
+            self.beta1 * self.m[layer_id]["dW"] + (1 - self.beta1) * grad_w
+        )
+        self.m[layer_id]["db"] = (
+            self.beta1 * self.m[layer_id]["db"] + (1 - self.beta1) * grad_b
+        )
 
         # Update biased second raw moment estimate
-        self.v[layer_id]['dW'] = self.beta2 * self.v[layer_id]['dW'] + (1 - self.beta2) * (grad_w ** 2)
-        self.v[layer_id]['db'] = self.beta2 * self.v[layer_id]['db'] + (1 - self.beta2) * (grad_b ** 2)
+        self.v[layer_id]["dW"] = self.beta2 * self.v[layer_id]["dW"] + (
+            1 - self.beta2
+        ) * (grad_w**2)
+        self.v[layer_id]["db"] = self.beta2 * self.v[layer_id]["db"] + (
+            1 - self.beta2
+        ) * (grad_b**2)
 
         # Compute bias-corrected first moment estimate
-        m_hat_dW = self.m[layer_id]['dW'] / (1 - self.beta1 ** self.t)
-        m_hat_db = self.m[layer_id]['db'] / (1 - self.beta1 ** self.t)
+        m_hat_dW = self.m[layer_id]["dW"] / (1 - self.beta1**self.t)
+        m_hat_db = self.m[layer_id]["db"] / (1 - self.beta1**self.t)
 
         # Compute bias-corrected second raw moment estimate
-        v_hat_dW = self.v[layer_id]['dW'] / (1 - self.beta2 ** self.t)
-        v_hat_db = self.v[layer_id]['db'] / (1 - self.beta2 ** self.t)
+        v_hat_dW = self.v[layer_id]["dW"] / (1 - self.beta2**self.t)
+        v_hat_db = self.v[layer_id]["db"] / (1 - self.beta2**self.t)
 
         # Update parameters
-        layer.weights -= self.learning_rate * m_hat_dW / (np.sqrt(v_hat_dW) + self.epsilon)
+        layer.weights -= (
+            self.learning_rate * m_hat_dW / (np.sqrt(v_hat_dW) + self.epsilon)
+        )
         # ### FIXED ### - Changed layer.bias to layer.biases
-        layer.biases -= self.learning_rate * m_hat_db / (np.sqrt(v_hat_db) + self.epsilon)
+        layer.biases -= (
+            self.learning_rate * m_hat_db / (np.sqrt(v_hat_db) + self.epsilon)
+        )
+
 
 # ---------------------------------------------------------------------------
 # Network Architecture

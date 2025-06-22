@@ -12,23 +12,16 @@ print("spaCy model loaded successfully.")
 
 def vectorize_reviews(reviews):
     """
-    Converts a list of cleaned text reviews into document vectors using spaCy's
-    pre-trained word embeddings.
-
-    The document vector is the average of its word vectors.
+    Converts a list of RAW text reviews into document vectors using spaCy.
     """
     print(f"Vectorizing {len(reviews)} reviews using spaCy...")
     vectors = []
     
-    # nlp.pipe is a much faster way to process multiple texts
-    for doc in nlp.pipe(reviews):
-        # doc.vector is the average of the word vectors in the document
-        # We check if a vector exists (it might not for empty strings)
-        if doc.has_vector:
-            vectors.append(doc.vector)
-        else:
-            # For empty or out-of-vocabulary texts, add a zero vector of the same dimension
-            vectors.append(np.zeros((nlp.vocab.vectors_length,)))
+    # ### NEW: Disable parser and ner for a huge speed-up! ###
+    # We only need the word vectors, not the full linguistic analysis.
+    # Pass the reviews directly to nlp.pipe
+    for doc in nlp.pipe(reviews, disable=["parser", "ner"]):
+        vectors.append(doc.vector)
 
     print("Vectorization complete!")
     return np.array(vectors)
