@@ -37,6 +37,28 @@ def train_sentiment_model():
         print("❌ No data loaded! Make sure dataset is in data/aclImdb/")
         return
 
+    # Add this after loading data to check for issues
+    def analyze_data_quality(reviews, labels):
+        print("=== DATA QUALITY ANALYSIS ===")
+        print(f"Total samples: {len(reviews)}")
+        print(f"Positive samples: {np.sum(labels == 1)}")
+        print(f"Negative samples: {np.sum(labels == 0)}")
+        print(f"Class balance: {np.sum(labels == 1) / len(labels):.3f}")
+        
+        # Check review lengths
+        lengths = [len(review.split()) for review in reviews]
+        print(f"Average review length: {np.mean(lengths):.1f} words")
+        print(f"Min length: {np.min(lengths)}, Max length: {np.max(lengths)}")
+        
+        # Check for duplicates
+        unique_reviews = len(set(reviews))
+        print(f"Unique reviews: {unique_reviews}/{len(reviews)} ({unique_reviews/len(reviews):.3f})")
+        
+        return True
+
+    # Call it after loading data
+    analyze_data_quality(reviews, labels)
+
     # Step 2: Preprocess text
     print("\n🧹 STEP 2: Preprocessing text...")
     preprocessor = TextPreprocessor()
@@ -73,12 +95,10 @@ def train_sentiment_model():
 
     # Different activations for different purposes
     model = NeuralNetwork()
-    model.add_layer(input_size=vectorizer.vocabulary_size, output_size=256, activation_name="leaky_relu")  # Good for input
-    model.add_layer(input_size=256, output_size=128, activation_name="relu")  # Standard hidden
-    model.add_layer(input_size=128, output_size=64, activation_name="leaky_relu")  # Prevent dying neurons
-    model.add_layer(input_size=64, output_size=1, activation_name="sigmoid")  # Output
+    model.add_layer(input_size=vectorizer.vocabulary_size, output_size=64, activation_name="relu")
+    model.add_layer(input_size=64, output_size=1, activation_name="sigmoid")
 
-    model.compile(optimizer=SGD(learning_rate=0.01, decay=0.001), loss=BinaryCrossEntropy())
+    model.compile(optimizer=SGD(learning_rate=0.01, decay=0.001) , loss=BinaryCrossEntropy())
  
 
 
