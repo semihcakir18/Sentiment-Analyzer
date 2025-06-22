@@ -58,7 +58,7 @@ def train_sentiment_model():
 
     # Step 4: Vectorize text
     print("\n🔢 STEP 4: Converting text to numbers...")
-    vectorizer = BagOfWordsVectorizer(max_features=10000, min_word_freq=5)
+    vectorizer = BagOfWordsVectorizer(max_features=20000, min_word_freq=2)
 
     # Fit vectorizer on training data only
     X_train = vectorizer.fit_transform(train_reviews)
@@ -71,16 +71,14 @@ def train_sentiment_model():
     # Step 5: Create and train neural network
     print("\n🧠 STEP 5: Training neural network...")
 
-    # Gradually decreasing layer sizes
+    # Different activations for different purposes
     model = NeuralNetwork()
-    model.add_layer(input_size=vectorizer.vocabulary_size, output_size=512, activation_name="relu")
-    model.add_layer(input_size=512, output_size=256, activation_name="relu")
-    model.add_layer(input_size=256, output_size=128, activation_name="relu")
-    model.add_layer(input_size=128, output_size=64, activation_name="relu")
-    model.add_layer(input_size=64, output_size=32, activation_name="relu")
-    model.add_layer(input_size=32, output_size=1, activation_name="sigmoid")
+    model.add_layer(input_size=vectorizer.vocabulary_size, output_size=256, activation_name="leaky_relu")  # Good for input
+    model.add_layer(input_size=256, output_size=128, activation_name="relu")  # Standard hidden
+    model.add_layer(input_size=128, output_size=64, activation_name="leaky_relu")  # Prevent dying neurons
+    model.add_layer(input_size=64, output_size=1, activation_name="sigmoid")  # Output
 
-    model.compile(optimizer=SGD(learning_rate=0.003), loss=BinaryCrossEntropy())
+    model.compile(optimizer=SGD(learning_rate=0.01, decay=0.001), loss=BinaryCrossEntropy())
  
 
 
