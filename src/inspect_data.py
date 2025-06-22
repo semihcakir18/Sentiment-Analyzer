@@ -10,7 +10,9 @@ sys.path.append(os.path.dirname(__file__))
 
 from data_loader import IMDBDataLoader
 from preprocessing import TextPreprocessor
-from vectorizer import BagOfWordsVectorizer
+
+from vectorizer_spacy import vectorize_reviews
+
 
 def inspect_raw_data(reviews, labels, n_samples=5):
     """Inspect raw data before any processing"""
@@ -61,26 +63,6 @@ def inspect_cleaned_data(original_reviews, cleaned_reviews, labels, n_samples=5)
         orig_words = len(original_reviews[idx].split())
         clean_words = len(cleaned_reviews[idx].split())
         print(f"Words: {orig_words} → {clean_words}")
-
-def inspect_vocabulary(vectorizer, top_n=20):
-    """Inspect the vocabulary created by vectorizer"""
-    print("\n📚 VOCABULARY INSPECTION")
-    print("=" * 50)
-    
-    print(f"Vocabulary size: {vectorizer.vocabulary_size}")
-    
-    if hasattr(vectorizer, 'word_counts'):
-        # Get most common words
-        most_common = vectorizer.word_counts.most_common(top_n)
-        print(f"\nTop {top_n} most frequent words:")
-        for word, count in most_common:
-            print(f"  {word}: {count}")
-        
-        # Get least common words (that made it into vocabulary)
-        least_common = vectorizer.word_counts.most_common()[-top_n:]
-        print(f"\nTop {top_n} least frequent words (in vocabulary):")
-        for word, count in reversed(least_common):
-            print(f"  {word}: {count}")
 
 def visualize_vectors_2d(X, labels, n_samples=1000, method='pca'):
     """Visualize high-dimensional vectors in 2D"""
@@ -217,9 +199,9 @@ def plot_vector_distributions(X, labels):
     axes[0, 0].legend()
     axes[0, 0].grid(True, alpha=0.3)
     
-    # 2. Number of non-zero features
-    nonzero_pos = np.sum(X[pos_mask] > 0, axis=1)
-    nonzero_neg = np.sum(X[neg_mask] > 0, axis=1)
+    # 2. Number of non-zero features (less useful for dense vectors, but won't break)
+    nonzero_pos = np.sum(X[pos_mask] != 0, axis=1)
+    nonzero_neg = np.sum(X[neg_mask] != 0, axis=1)
     
     axes[0, 1].hist(nonzero_pos, bins=50, alpha=0.7, label='Positive', color='red')
     axes[0, 1].hist(nonzero_neg, bins=50, alpha=0.7, label='Negative', color='blue')
@@ -230,8 +212,8 @@ def plot_vector_distributions(X, labels):
     axes[0, 1].grid(True, alpha=0.3)
     
     # 3. Feature values distribution
-    pos_values = X[pos_mask][X[pos_mask] > 0]
-    neg_values = X[neg_mask][X[neg_mask] > 0]
+    pos_values = X[pos_mask][X[pos_mask] != 0]
+    neg_values = X[neg_mask][X[neg_mask] != 0]
     
     axes[1, 0].hist(pos_values, bins=50, alpha=0.7, label='Positive', color='red')
     axes[1, 0].hist(neg_values, bins=50, alpha=0.7, label='Negative', color='blue')
@@ -245,13 +227,11 @@ def plot_vector_distributions(X, labels):
     avg_pos = np.mean(X[pos_mask], axis=0)
     avg_neg = np.mean(X[neg_mask], axis=0)
     
-    # Show top features that differ between classes
-    diff = avg_pos - avg_neg
-    top_indices = np.argsort(np.abs(diff))[-100:]  # Top 100 different features
-    
-    axes[1, 1].scatter(avg_pos[top_indices], avg_neg[top_indices], alpha=0.6)
-    axes[1, 1].plot([0, np.max([avg_pos.max(), avg_neg.max()])], 
-                    [0, np.max([avg_pos.max(), avg_neg.max()])], 'r--', alpha=0.5)
+    # No need to select indices, just plot all 300 dimensions
+    axes[1, 1].scatter(avg_pos, avg_neg, alpha=0.6)
+    min_val = min(avg_pos.min(), avg_neg.min())
+    max_val = max(avg_pos.max(), avg_neg.max())
+    axes[1, 1].plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.5)
     axes[1, 1].set_xlabel('Average Feature Value (Positive)')
     axes[1, 1].set_ylabel('Average Feature Value (Negative)')
     axes[1, 1].set_title('Feature Values: Positive vs Negative')
@@ -261,7 +241,7 @@ def plot_vector_distributions(X, labels):
     plt.show()
 
 def main():
-    """Main inspection pipeline"""
+    """Main inspection pipeline with spaCy Embeddings"""
     print("🔍 DATA INSPECTION PIPELINE")
     print("=" * 60)
     
@@ -283,36 +263,22 @@ def main():
     cleaned_reviews = preprocessor.clean_reviews(reviews)
     inspect_cleaned_data(reviews, cleaned_reviews, labels, n_samples=3)
     
-    # 3. Vectorize and inspect
-    print("\nVectorizing data...")
-    vectorizer = BagOfWordsVectorizer(max_features=5000, min_word_freq=5)
-    X = vectorizer.fit_transform(cleaned_reviews)
+    # 3. ### FIXED ### Vectorize using the spaCy function
+    print("\nVectorizing data using spaCy...")
+    X = vectorize_reviews(cleaned_reviews)
     
-    inspect_vocabulary(vectorizer)
+    # ### FIXED ### The following functions are no longer relevant for embeddings
+    # inspect_vocabulary(vectorizer) 
+    
+    # The statistical analysis will still work and provide insights on the new vectors
     analyze_vector_statistics(X, labels)
     
     # 4. Visualize vectors
     print("\nCreating visualizations...")
-    
-    # PCA visualization
     try:
         visualize_vectors_2d(X, labels, n_samples=25000, method='pca')
     except Exception as e:
         print(f"PCA visualization failed: {e}")
-        print("Trying random projection...")
-        # 4. Visualize vectors (continued)
-    print("\nCreating visualizations...")
-    
-    # PCA visualization
-    try:
-        visualize_vectors_2d(X, labels, n_samples=25000, method='pca')
-    except Exception as e:
-        print(f"PCA visualization failed: {e}")
-        print("Trying random projection...")
-        try:
-            visualize_vectors_2d(X, labels, n_samples=25000, method='random')
-        except Exception as e:
-            print(f"Random projection also failed: {e}")
     
     # 5. Plot distributions
     try:
@@ -320,184 +286,12 @@ def main():
     except Exception as e:
         print(f"Distribution plotting failed: {e}")
     
-    # 6. Sample some vectorized examples
-    print("\n🔢 VECTORIZED EXAMPLES")
-    print("=" * 50)
-    
-    sample_indices = random.sample(range(len(cleaned_reviews)), 3)
-    for i, idx in enumerate(sample_indices):
-        sentiment = "POSITIVE" if labels[idx] == 1 else "NEGATIVE"
-        print(f"\n--- Vectorized Sample {i+1} ({sentiment}) ---")
-        print(f"Original text: {cleaned_reviews[idx][:100]}...")
-        
-        # Get the vector for this sample
-        sample_vector = X[idx].toarray().flatten() if hasattr(X[idx], 'toarray') else X[idx]
-        
-        # Find non-zero features
-        nonzero_indices = np.where(sample_vector > 0)[0]
-        nonzero_values = sample_vector[nonzero_indices]
-        
-        print(f"Vector shape: {sample_vector.shape}")
-        print(f"Non-zero features: {len(nonzero_indices)}")
-        print(f"Vector magnitude: {np.linalg.norm(sample_vector):.3f}")
-        
-        # Show top features if we have vocabulary
-        if hasattr(vectorizer, 'vocab_to_index'):
-            # Reverse the vocabulary mapping
-            index_to_vocab = {v: k for k, v in vectorizer.vocab_to_index.items()}
-            
-            # Get top 10 features for this sample
-            top_feature_indices = nonzero_indices[np.argsort(nonzero_values)[-10:]]
-            print("Top 10 features:")
-            for feat_idx in reversed(top_feature_indices):
-                word = index_to_vocab.get(feat_idx, f"feature_{feat_idx}")
-                value = sample_vector[feat_idx]
-                print(f"  {word}: {value:.3f}")
+    # ### FIXED ### This section is removed as it relied on a word-based vocabulary
+    # print("\n🔢 VECTORIZED EXAMPLES")
     
     print("\n✅ Data inspection completed!")
 
-def quick_inspection():
-    """Quick inspection with minimal samples for fast debugging"""
-    print("🚀 QUICK DATA INSPECTION")
-    print("=" * 40)
-    
-    # Load small sample
-    loader = IMDBDataLoader()
-    reviews, labels = loader.load_training_data()
-    
-    if len(reviews) == 0:
-        print("❌ No data found!")
-        return
-    
-    # Take only first 1000 samples for speed
-    reviews = reviews[:1000]
-    labels = labels[:1000]
-    
-    print(f"Using {len(reviews)} samples for quick inspection")
-    
-    # Quick preprocessing
-    preprocessor = TextPreprocessor()
-    cleaned_reviews = preprocessor.clean_reviews(reviews)
-    
-    # Quick vectorization
-    vectorizer = BagOfWordsVectorizer(max_features=1000, min_word_freq=2)
-    X = vectorizer.fit_transform(cleaned_reviews)
-    
-    # Quick stats
-    print(f"Vocabulary size: {vectorizer.vocabulary_size}")
-    print(f"Vector shape: {X.shape}")
-    print(f"Sparsity: {np.mean(X == 0):.3f}")
-    
-    # Quick visualization
-    try:
-        visualize_vectors_2d(X, labels, n_samples=500, method='random')
-    except Exception as e:
-        print(f"Visualization failed: {e}")
-    
-    print("✅ Quick inspection done!")
 
-def inspect_specific_words(vectorizer, words_to_check):
-    """Check if specific words are in vocabulary and their frequencies"""
-    print(f"\n🔍 SPECIFIC WORD INSPECTION")
-    print("=" * 50)
-    
-    if not hasattr(vectorizer, 'vocab_to_index'):
-        print("Vectorizer doesn't have vocabulary mapping!")
-        return
-    
-    print(f"Checking {len(words_to_check)} words...")
-    
-    found_words = []
-    missing_words = []
-    
-    for word in words_to_check:
-        if word in vectorizer.vocab_to_index:
-            idx = vectorizer.vocab_to_index[word]
-            freq = vectorizer.word_counts.get(word, 0) if hasattr(vectorizer, 'word_counts') else 'unknown'
-            found_words.append((word, idx, freq))
-            print(f"✅ '{word}' -> index {idx}, frequency: {freq}")
-        else:
-            missing_words.append(word)
-            print(f"❌ '{word}' not in vocabulary")
-    
-    print(f"\nSummary: {len(found_words)} found, {len(missing_words)} missing")
-    
-    if missing_words:
-        print(f"Missing words: {missing_words}")
-
-def compare_preprocessing_methods():
-    """Compare different preprocessing approaches"""
-    print("\n🔄 PREPROCESSING COMPARISON")
-    print("=" * 50)
-    
-    # Load small sample
-    loader = IMDBDataLoader()
-    reviews, labels = loader.load_training_data()
-    sample_reviews = reviews[:100]  # Small sample for comparison
-    
-    preprocessor = TextPreprocessor()
-    
-    print("Comparing preprocessing on 100 samples...")
-    
-    # Method 1: Current preprocessing
-    cleaned_1 = preprocessor.clean_reviews(sample_reviews)
-    
-    # Method 2: Minimal preprocessing (just lowercase)
-    cleaned_2 = [review.lower() for review in sample_reviews]
-    
-    # Method 3: Aggressive preprocessing (remove more)
-    def aggressive_clean(text):
-        import re
-        text = text.lower()
-        text = re.sub(r'[^a-zA-Z\s]', '', text)  # Only letters
-        text = re.sub(r'\s+', ' ', text).strip()
-        return text
-    
-    cleaned_3 = [aggressive_clean(review) for review in sample_reviews]
-    
-    # Compare vocabulary sizes
-    vectorizer1 = BagOfWordsVectorizer(max_features=1000, min_word_freq=1)
-    vectorizer2 = BagOfWordsVectorizer(max_features=1000, min_word_freq=1)
-    vectorizer3 = BagOfWordsVectorizer(max_features=1000, min_word_freq=1)
-    
-    X1 = vectorizer1.fit_transform(cleaned_1)
-    X2 = vectorizer2.fit_transform(cleaned_2)
-    X3 = vectorizer3.fit_transform(cleaned_3)
-    
-    print(f"Current preprocessing: {vectorizer1.vocabulary_size} unique words")
-    print(f"Minimal preprocessing: {vectorizer2.vocabulary_size} unique words")
-    print(f"Aggressive preprocessing: {vectorizer3.vocabulary_size} unique words")
-    
-    # Show example
-    idx = 0
-    print(f"\nExample comparison (sample {idx}):")
-    print(f"Original: {sample_reviews[idx][:100]}...")
-    print(f"Current:  {cleaned_1[idx][:100]}...")
-    print(f"Minimal:  {cleaned_2[idx][:100]}...")
-    print(f"Aggressive: {cleaned_3[idx][:100]}...")
-
+# ### FIXED ### Simplified the main execution block
 if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='Inspect sentiment analysis data')
-    parser.add_argument('--quick', action='store_true', help='Run quick inspection only')
-    parser.add_argument('--words', nargs='+', help='Check specific words in vocabulary')
-    parser.add_argument('--compare-preprocessing', action='store_true', help='Compare preprocessing methods')
-    
-    args = parser.parse_args()
-    
-    if args.quick:
-        quick_inspection()
-    elif args.words:
-        # Need to load and vectorize first
-        loader = IMDBDataLoader()
-        reviews, labels = loader.load_training_data()
-        preprocessor = TextPreprocessor()
-        cleaned_reviews = preprocessor.clean_reviews(reviews[:1000])  # Sample for speed
-        vectorizer = BagOfWordsVectorizer(max_features=5000, min_word_freq=5)
-        vectorizer.fit_transform(cleaned_reviews)
-        inspect_specific_words(vectorizer, args.words)
-    elif args.compare_preprocessing:
-        compare_preprocessing_methods()
-    else:
-        main()
+    main()
