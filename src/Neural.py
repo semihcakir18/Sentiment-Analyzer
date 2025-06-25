@@ -242,6 +242,170 @@ class Dropout:
         return dvalues * self.mask
 
 
+class EmbeddingLayer:
+    def __init__(self, vocab_size, output_dim):
+        self.type = "embedding"
+        self.vocab_size = vocab_size
+        self.output_dim = output_dim
+        # Initialize embedding matrix (this is what gets learned)
+        self.embeddings = np.random.randn(vocab_size, output_dim) * 0.01
+        self.input_indices = None
+        self.delta_embeddings = None
+
+    def forward(self, indices):
+        self.input_indices = indices
+        # Look up the vector for each index in the input
+        # This creates an output of shape (batch_size, sequence_length, output_dim)
+        return self.embeddings[indices]
+
+    def backward(self, dvalues):
+        # The 'dvalues' are the gradients coming from the next layer (the LSTM).
+        # Its shape is (batch_size, sequence_length, output_dim).
+
+        # We need to add the gradients back to the specific embeddings that were used.
+        # Initialize a zero-gradient matrix
+        self.delta_embeddings = np.zeros_like(self.embeddings)
+
+        # np.add.at is a special function that efficiently adds values to an array
+        # at specific indices. It's perfect for handling the embedding gradient.
+        np.add.at(self.delta_embeddings, self.input_indices, dvalues)
+
+        # There is no gradient to propagate further back from an embedding layer,
+        # as it is the first layer. So we return None.
+        return None
+
+
+# In Neural.py, replace the old LSTMLayer class with this one.
+
+
+class LSTMLayer:
+    def __init__(self, input_size, hidden_size):
+        self.type = "lstm"
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+
+        # Gate weights
+        self.Wf = np.random.randn(input_size, hidden_size) / np.sqrt(input_size)
+        self.Wi = np.random.randn(input_size, hidden_size) / np.sqrt(input_size)
+        self.Wg = np.random.randn(input_size, hidden_size) / np.sqrt(input_size)
+        self.Wo = np.random.randn(input_size, hidden_size) / np.sqrt(input_size)
+        # Hidden state weights
+        self.Uf = np.random.randn(hidden_size, hidden_size) / np.sqrt(hidden_size)
+        self.Ui = np.random.randn(hidden_size, hidden_size) / np.sqrt(hidden_size)
+        self.Ug = np.random.randn(hidden_size, hidden_size) / np.sqrt(hidden_size)
+        self.Uo = np.random.randn(hidden_size, hidden_size) / np.sqrt(hidden_size)
+        # Biases
+        self.bf = np.zeros((1, hidden_size))
+        self.bi = np.zeros((1, hidden_size))
+        self.bg = np.zeros((1, hidden_size))
+        self.bo = np.zeros((1, hidden_size))
+
+        self.cache = []
+
+    def forward(self, x):
+        n_samples, seq_len, _ = x.shape
+        h_prev = np.zeros((n_samples, self.hidden_size))
+        c_prev = np.zeros((n_samples, self.hidden_size))
+
+        self.cache = []
+        outputs = []
+
+        for t in range(seq_len):
+            xt = x[:, t, :]
+            f = ActivationFunctions.sigmoid(xt @ self.Wf + h_prev @ self.Uf + self.bf)
+            i = ActivationFunctions.sigmoid(xt @ self.Wi + h_prev @ self.Ui + self.bi)
+            g = np.tanh(xt @ self.Wg + h_prev @ self.Ug + self.bg)
+            o = ActivationFunctions.sigmoid(xt @ self.Wo + h_prev @ self.Uo + self.bo)
+
+            c_next = f * c_prev + i * g
+            h_next = o * np.tanh(c_next)
+
+            self.cache.append((xt, h_prev, c_prev, f, i, g, o, c_next, h_next))
+
+            h_prev, c_prev = h_next, c_next
+            outputs.append(h_next)
+
+        return outputs[-1]
+
+    def backward(self, d_h_final):
+        # Initialize gradients for weights and biases
+        self.dWf, self.dWi, self.dWg, self.dWo = [
+            np.zeros_like(w) for w in [self.Wf, self.Wi, self.Wg, self.Wo]
+        ]
+        self.dUf, self.dUi, self.dUg, self.dUo = [
+            np.zeros_like(u) for u in [self.Uf, self.Ui, self.Ug, self.Uo]
+        ]
+        self.dbf, self.dbi, self.dbg, self.dbo = [
+            np.zeros_like(b) for b in [self.bf, self.bi, self.bg, self.bo]
+        ]
+
+        # ### NEW ### - Initialize gradient for the input sequence (dx)
+        # Get shape information from the cache
+        n_samples, input_size = self.cache[0][0].shape
+        seq_len = len(self.cache)
+        dx = np.zeros((n_samples, seq_len, input_size))
+
+        # Initialize gradients for states that flow backwards
+        d_h_next = d_h_final
+        d_c_next = np.zeros_like(d_h_final)
+
+        # Iterate backwards through time
+        for t in reversed(range(len(self.cache))):
+            xt, h_prev, c_prev, f, i, g, o, c_next, h_next = self.cache[t]
+
+            do = d_h_next * np.tanh(c_next)
+            dc = d_h_next * o * (1 - np.tanh(c_next) ** 2) + d_c_next
+            df = dc * c_prev
+            di = dc * g
+            dg = dc * i
+
+            d_f_act = df * (f * (1 - f))  # Sigmoid derivative
+            d_i_act = di * (i * (1 - i))  # Sigmoid derivative
+            d_g_act = dg * (1 - g**2)  # Tanh derivative
+            d_o_act = do * (o * (1 - o))  # Sigmoid derivative
+
+            # Accumulate weight gradients
+            self.dWf += xt.T @ d_f_act
+            self.dWi += xt.T @ d_i_act
+            self.dWg += xt.T @ d_g_act
+            self.dWo += xt.T @ d_o_act
+            self.dUf += h_prev.T @ d_f_act
+            self.dUi += h_prev.T @ d_i_act
+            self.dUg += h_prev.T @ d_g_act
+            self.dUo += h_prev.T @ d_o_act
+
+            # Accumulate bias gradients
+            self.dbf += np.sum(d_f_act, axis=0)
+            self.dbi += np.sum(d_i_act, axis=0)
+            self.dbg += np.sum(d_g_act, axis=0)
+            self.dbo += np.sum(d_o_act, axis=0)
+
+            # ### NEW ### - Calculate gradient w.r.t the layer input at this timestep (xt)
+            d_xt = (
+                d_f_act @ self.Wf.T
+                + d_i_act @ self.Wi.T
+                + d_g_act @ self.Wg.T
+                + d_o_act @ self.Wo.T
+            )
+            # Store it in our master dx array
+            dx[:, t, :] = d_xt
+
+            # Calculate error to propagate to previous hidden state
+            d_h_prev = (
+                d_f_act @ self.Uf.T
+                + d_i_act @ self.Ui.T
+                + d_g_act @ self.Ug.T
+                + d_o_act @ self.Uo.T
+            )
+
+            # Update gradients for the next (previous in time) iteration
+            d_h_next = d_h_prev
+            d_c_next = dc * f
+
+        # ### FIXED ### - Return the gradient w.r.t. the input sequence
+        return dx
+
+
 # ---------------------------------------------------------------------------
 # Main Neural Network Class
 # ---------------------------------------------------------------------------
