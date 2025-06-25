@@ -1,3 +1,4 @@
+# This vectorizer is not being used in the final version , but I didint want to delete it. This was my vectorizer before spacy.
 import numpy as np
 from collections import Counter
 import pickle

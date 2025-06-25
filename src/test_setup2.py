@@ -1,3 +1,4 @@
+# This test were checking if the BagOfWordsVectorizer working correctly. Just like the vectorizer , this is also is not being used anymore due to change of vectorizer.
 import sys
 import os
 import numpy as np

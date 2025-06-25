@@ -34,8 +34,6 @@ def train_sentiment_model():
     print(f"Training samples: {len(train_reviews)}")
     print(f"Validation samples: {len(val_reviews)}")
 
-    # We will still create a preprocessor object for use later, but we DON'T
-    # use it on the main dataset before vectorization.
     preprocessor = TextPreprocessor()
 
     # Step 3: Load or Generate Vectors
@@ -73,7 +71,7 @@ def train_sentiment_model():
     model.add_layer(Dropout(rate=0.5))
 
     # Add the second dense layer
-    model.add_layer(Layer(input_size=128, output_size=64, activation_name="relu"))
+    model.add_layer(Layer(input_size=128, output_size=64, activation_name="leaky_relu"))
     # Add another Dropout layer
     model.add_layer(Dropout(rate=0.5))
 
@@ -81,7 +79,7 @@ def train_sentiment_model():
     model.add_layer(Layer(input_size=64, output_size=1, activation_name="sigmoid"))
 
     # Compile with the powerful Adam optimizer
-    model.compile(optimizer=Adam(learning_rate=0.0004), loss=BinaryCrossEntropy())
+    model.compile(optimizer=Adam(learning_rate=0.001), loss=BinaryCrossEntropy())
 
     # Train the model
     model.train(X_train, train_labels, X_val, val_labels, epochs=300, batch_size=128)

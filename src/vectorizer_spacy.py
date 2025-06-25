@@ -1,5 +1,3 @@
-# In vectorizer_spacy.py
-
 import spacy
 import numpy as np
 
@@ -10,16 +8,14 @@ print("Loading spaCy model 'en_core_web_md'...")
 nlp = spacy.load("en_core_web_md")
 print("spaCy model loaded successfully.")
 
+
 def vectorize_reviews(reviews):
     """
     Converts a list of RAW text reviews into document vectors using spaCy.
     """
     print(f"Vectorizing {len(reviews)} reviews using spaCy...")
     vectors = []
-    
-    # ### NEW: Disable parser and ner for a huge speed-up! ###
-    # We only need the word vectors, not the full linguistic analysis.
-    # Pass the reviews directly to nlp.pipe
+
     for doc in nlp.pipe(reviews, disable=["parser", "ner"]):
         vectors.append(doc.vector)
 
