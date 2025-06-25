@@ -72,7 +72,6 @@ class BinaryCrossEntropy(Loss):
     def derivative(self, y_true, y_pred):
         return y_pred - y_true
 
-
 # --- Optimizers ---
 class SGD:
     """Stochastic Gradient Descent optimizer."""

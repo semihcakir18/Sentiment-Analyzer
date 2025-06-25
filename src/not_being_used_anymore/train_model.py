@@ -1,3 +1,4 @@
+# Instead of this model , now using lstm
 import sys
 import os
 import numpy as np

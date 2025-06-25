@@ -5,13 +5,11 @@ import matplotlib.pyplot as plt
 import random
 from collections import Counter
 
-# Add src to path
-sys.path.append(os.path.dirname(__file__))
 
-from data_loader import IMDBDataLoader
-from preprocessing import TextPreprocessor
+from ..data_loader import IMDBDataLoader
+from ..preprocessing import TextPreprocessor
 
-from vectorizer_spacy import vectorize_reviews
+from ..vectorizer_spacy import vectorize_reviews
 
 
 def inspect_raw_data(reviews, labels, n_samples=5):

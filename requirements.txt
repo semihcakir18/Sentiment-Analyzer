@@ -1,4 +1,10 @@
-numpy>=1.21.0
-matplotlib>=3.5.0
-spacy>=3.8.7
-nltk>=3.9.1
+# Core libraries for scientific computing and plotting
+numpy==2.3.1
+matplotlib==3.10.0
+
+# Natural Language Processing libraries
+nltk==3.9.1
+spacy==3.8.7
+
+# scikit-learn for the train_test_split utility
+scikit-learn

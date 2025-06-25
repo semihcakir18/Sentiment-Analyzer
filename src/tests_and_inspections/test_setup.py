@@ -8,11 +8,9 @@ import sys
 import os
 from pathlib import Path
 
-# Add the src directory to Python path so we can import our modules
-sys.path.append(os.path.join(os.path.dirname(__file__)))
 
-from data_loader import IMDBDataLoader
-from preprocessing import TextPreprocessor
+from ..data_loader import IMDBDataLoader
+from ..preprocessing import TextPreprocessor
 
 
 def test_data_loading():

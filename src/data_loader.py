@@ -2,7 +2,6 @@ import os
 import numpy as np
 from pathlib import Path
 
-
 class IMDBDataLoader:
     def __init__(self, data_path="data/aclImdb_v1/aclImdb"):
         self.data_path = data_path

@@ -16,7 +16,7 @@ print("➡️ STEP 1: Setting up configuration...")
 max_words = 5000
 max_len = 100
 learning_rate = 0.005 # A good rate for Adam
-epochs = 10
+epochs = 15
 batch_size = 64
 grad_clip_threshold = 5.0 # For gradient clipping
 

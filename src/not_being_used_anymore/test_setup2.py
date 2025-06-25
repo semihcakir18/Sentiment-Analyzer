@@ -3,10 +3,8 @@ import sys
 import os
 import numpy as np
 
-sys.path.append(os.path.dirname(__file__))
-
-from vectorizer import BagOfWordsVectorizer
-from Neural import *
+from .vectorizer import BagOfWordsVectorizer
+from ..Neural import *
 
 
 def test_vectorizer():
